@@ -62,19 +62,20 @@ wrapConnection :: Sqlite.Connection -> LogFunc -> IO Connection
 wrapConnection conn logFunc = do
     smap <- newIORef $ Map.empty
     return Connection
-        { connPrepare = prepare' conn
-        , connStmtMap = smap
-        , connInsertSql = insertSql'
-        , connClose = Sqlite.close conn
-        , connMigrateSql = migrate'
-        , connBegin = helper "BEGIN"
-        , connCommit = helper "COMMIT"
-        , connRollback = ignoreExceptions . helper "ROLLBACK"
-        , connEscapeName = escape
-        , connNoLimit = "LIMIT -1"
-        , connRDBMS = "sqlite"
-        , connLimitOffset = decorateSQLWithLimitOffset "LIMIT -1"
-        , connLogFunc = logFunc
+        { connPrepare       = prepare' conn
+        , connStmtMap       = smap
+        , connInsertSql     = insertSql'
+        , connInsertManySql = insertManySql'
+        , connClose         = Sqlite.close conn
+        , connMigrateSql    = migrate'
+        , connBegin         = helper "BEGIN"
+        , connCommit        = helper "COMMIT"
+        , connRollback      = ignoreExceptions . helper "ROLLBACK"
+        , connEscapeName    = escape
+        , connNoLimit       = "LIMIT -1"
+        , connRDBMS         = "sqlite"
+        , connLimitOffset   = decorateSQLWithLimitOffset "LIMIT -1"
+        , connLogFunc       = logFunc
         }
   where
     helper t getter = do
@@ -138,6 +139,21 @@ insertSql' ent vals =
                       , ")"
                       ]
               ]
+
+insertManySql' :: EntityDef SqlType -> [[PersistValue]] -> InsertManySqlResult
+insertManySql' ent valss =
+  let sql = pack $ concat
+                [ "INSERT INTO "
+                , escapeDBName $ entityDB ent
+                , "("
+                , intercalate "," $ map (escapeDBName . fieldDB) $ entityFields ent
+                , ") VALUES ("
+                , intercalate "),(" $ replicate (length valss) $ intercalate "," $ map (const "?") (entityFields ent)
+                , ")"
+                ]
+  in case entityPrimary ent of
+       Just _ -> IMSRManyKeys sql valss
+       Nothing -> _
 
 execute' :: Sqlite.Connection -> Sqlite.Statement -> [PersistValue] -> IO Int64
 execute' conn stmt vals = flip finally (liftIO $ Sqlite.reset conn stmt) $ do

@@ -74,7 +74,6 @@ class PersistStore backend where
     -- @mapM insert@
     insertMany :: (MonadIO m, backend ~ PersistEntityBackend val, PersistEntity val)
                => [val] -> ReaderT backend m [Key val]
-    insertMany vals = mapM insert vals
 
     -- | Same as 'insertMany', but doesn't return any @Key@s.
     -- SQL backends use faster implementation for this than is currently

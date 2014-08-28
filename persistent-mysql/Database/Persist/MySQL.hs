@@ -98,20 +98,21 @@ open' ci = do
     MySQLBase.autocommit conn False -- disable autocommit!
     smap <- newIORef $ Map.empty
     return Connection
-        { connPrepare    = prepare' conn
-        , connStmtMap    = smap
-        , connInsertSql  = insertSql'
-        , connClose      = MySQL.close conn
-        , connMigrateSql = migrate' ci
-        , connBegin      = const $ MySQL.execute_ conn "start transaction" >> return ()
-        , connCommit     = const $ MySQL.commit   conn
-        , connRollback   = const $ MySQL.rollback conn
-        , connEscapeName = pack . escapeDBName
-        , connNoLimit    = "LIMIT 18446744073709551615"
+        { connPrepare       = prepare' conn
+        , connStmtMap       = smap
+        , connInsertSql     = insertSql'
+        , connInsertManySql = insertManySql'
+        , connClose         = MySQL.close conn
+        , connMigrateSql    = migrate' ci
+        , connBegin         = const $ MySQL.execute_ conn "start transaction" >> return ()
+        , connCommit        = const $ MySQL.commit   conn
+        , connRollback      = const $ MySQL.rollback conn
+        , connEscapeName    = pack . escapeDBName
+        , connNoLimit       = "LIMIT 18446744073709551615"
         -- This noLimit is suggested by MySQL's own docs, see
         -- <http://dev.mysql.com/doc/refman/5.5/en/select.html>
-        , connRDBMS      = "mysql"
-        , connLimitOffset = decorateSQLWithLimitOffset "LIMIT 18446744073709551615"
+        , connRDBMS         = "mysql"
+        , connLimitOffset   = decorateSQLWithLimitOffset "LIMIT 18446744073709551615"
         }
         
 -- | Prepare a query.  We don't support prepared statements, but
@@ -142,6 +143,24 @@ insertSql' ent vals =
   in case entityPrimary ent of
        Just _ -> ISRManyKeys sql vals
        Nothing -> ISRInsertGet sql "SELECT LAST_INSERT_ID()"
+
+
+-- | SQL code to be executed when inserting multiple entities.
+insertManySql' :: EntityDef SqlType -> [[PersistValue]] -> InsertManySqlResult
+insertManySql' ent valss =
+  let sql = pack $ concat
+                [ "INSERT INTO "
+                , escapeDBName $ entityDB ent
+                , "("
+                , intercalate "," $ map (escapeDBName . fieldDB) $ entityFields ent
+                , ") VALUES ("
+                , intercalate "),(" $ replicate (length valss) $ intercalate "," $ map (const "?") (entityFields ent)
+                , ")"
+                ]
+  in case entityPrimary ent of
+       Just _ -> IMSRManyKeys sql valss
+       Nothing -> _
+
 
 -- | Execute an statement that doesn't return any results.
 execute' :: MySQL.Connection -> MySQL.Query -> [PersistValue] -> IO Int64

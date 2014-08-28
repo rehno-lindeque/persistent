@@ -43,10 +43,13 @@ data InsertSqlResult = ISRSingle Text
                      | ISRInsertGet Text Text
                      | ISRManyKeys Text [PersistValue]
 
+data InsertManySqlResult = IMSRManyKeys Text [[PersistValue]]
+
 data Connection = Connection
     { connPrepare :: Text -> IO Statement
     -- | table name, column names, id name, either 1 or 2 statements to run
     , connInsertSql :: EntityDef SqlType -> [PersistValue] -> InsertSqlResult
+    , connInsertManySql :: EntityDef SqlType -> [[PersistValue]] -> InsertManySqlResult
     , connStmtMap :: IORef (Map Text Statement)
     , connClose :: IO ()
     , connMigrateSql

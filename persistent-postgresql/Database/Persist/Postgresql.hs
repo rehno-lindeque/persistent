@@ -117,19 +117,20 @@ openSimpleConn :: LogFunc -> PG.Connection -> IO Connection
 openSimpleConn logFunc conn = do
     smap <- newIORef $ Map.empty
     return Connection
-        { connPrepare    = prepare' conn
-        , connStmtMap    = smap
-        , connInsertSql  = insertSql'
-        , connClose      = PG.close conn
-        , connMigrateSql = migrate'
-        , connBegin      = const $ PG.begin    conn
-        , connCommit     = const $ PG.commit   conn
-        , connRollback   = const $ PG.rollback conn
-        , connEscapeName = escape
-        , connNoLimit    = "LIMIT ALL"
-        , connRDBMS      = "postgresql"
-        , connLimitOffset = decorateSQLWithLimitOffset "LIMIT ALL"
-        , connLogFunc = logFunc
+        { connPrepare       = prepare' conn
+        , connStmtMap       = smap
+        , connInsertSql     = insertSql'
+        , connInsertManySql = insertManySql'
+        , connClose         = PG.close conn
+        , connMigrateSql    = migrate'
+        , connBegin         = const $ PG.begin    conn
+        , connCommit        = const $ PG.commit   conn
+        , connRollback      = const $ PG.rollback conn
+        , connEscapeName    = escape
+        , connNoLimit       = "LIMIT ALL"
+        , connRDBMS         = "postgresql"
+        , connLimitOffset   = decorateSQLWithLimitOffset "LIMIT ALL"
+        , connLogFunc       = logFunc
         }
 
 prepare' :: PG.Connection -> Text -> IO Statement
@@ -160,6 +161,21 @@ insertSql' ent vals =
   in case entityPrimary ent of
        Just pdef -> ISRManyKeys sql vals
        Nothing -> ISRSingle (sql <> " RETURNING " <> escape (entityID ent))
+
+insertManySql' :: EntityDef SqlType -> [[PersistValue]] -> InsertManySqlResult
+insertManySql' ent valss =
+  let sql = pack $ concat
+                [ "INSERT INTO "
+                , escapeDBName $ entityDB ent
+                , "("
+                , intercalate "," $ map (escapeDBName . fieldDB) $ entityFields ent
+                , ") VALUES ("
+                , intercalate "),(" $ replicate (length valss) $ intercalate "," $ map (const "?") (entityFields ent)
+                , ")"
+                ]
+  in case entityPrimary ent of
+       Just _ -> IMSRManyKeys sql valss
+       Nothing -> _
 
 execute' :: PG.Connection -> PG.Query -> [PersistValue] -> IO Int64
 execute' conn query vals = PG.execute conn query (map P vals)
