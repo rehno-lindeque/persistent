@@ -76,6 +76,13 @@ class PersistStore backend where
                => [val] -> ReaderT backend m [Key val]
     insertMany vals = mapM insert vals
 
+    -- | Same as 'insertMany', but doesn't return any @Key@s.
+    -- SQL backends use faster implementation for this than is currently
+    -- used by 'insertMany'. If any entry fails to write (e.g. due to
+    -- uniqueness constraints), then the entire query will fail.
+    insertMany_ :: (MonadIO m, backend ~ PersistEntityBackend val, PersistEntity val)
+                => [val] -> ReaderT backend m ()
+
     -- | Create a new record in the database using the given key.
     insertKey :: (MonadIO m, backend ~ PersistEntityBackend val, PersistEntity val)
               => Key val -> val -> ReaderT backend m ()

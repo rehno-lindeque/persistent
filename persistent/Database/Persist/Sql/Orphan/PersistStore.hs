@@ -67,7 +67,21 @@ instance PersistStore Connection where
         return key
       where
         t = entityDef $ Just val
-        vals = map toPersistValue $ toPersistFields val
+        
+    insertMany_ vals = do
+      conn <- ask
+      let sql = pack $ concat
+                  [ "INSERT INTO "
+                  , escapeDBName $ entityDB t
+                  , "("
+                  , intercalate "," $ map (escapeDBName . fieldDB) $ entityFields t
+                  , ") VALUES ("
+                  , intercalate "),(" $ replicate (length valss) $ intercalate "," $ map (const "?") (entityFields t)
+                  , ")"
+                  ]
+      where
+        t = entityDef vals
+        valss = map (map toPersistValue . toPersistFields) vals
 
     replace k val = do
         conn <- ask
