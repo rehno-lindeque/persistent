@@ -67,39 +67,43 @@ instance PersistStore Connection where
         return key
       where
         t = entityDef $ Just val
+        vals = map toPersistValue $ toPersistFields val
 
     insertMany vals = do
+        conn <- ask
         let esql = connInsertManySql conn t valss
         keys <-
               case esql of
-                  IMSRSingle _ -> _
-                  IMSRInsertGet _ _ -> _
-                  IMSRManyKeys sql -> do
+                  -- IMSRSingle _ -> _
+                  -- IMSRInsertGet _ _ -> _
+                  IMSRManyKeys sql fss -> do
                       rawExecute sql (concat valss)
                       case entityPrimary t of
                           Nothing -> error $ "IMSRManyKeys is used when Primary is defined " ++ show sql
                           Just pdef -> 
                               let pks = map fst $ primaryFields pdef
-                                  keyvalss = _
+                                  keyvalss = _ fss
                               in return $ map (Key . PersistList) keyvalss
-        where
-          t = entityDef vals
-          valss = map (map toPersistValue . toPersistFields) vals
+        return keys
+      where
+        t = entityDef vals
+        valss = map (map toPersistValue . toPersistFields) vals
     
     insertMany_ vals = do
         conn <- ask
-        let sql = pack $ concat
-                    [ "INSERT INTO "
-                    , escapeDBName $ entityDB t
-                    , "("
-                    , intercalate "," $ map (escapeDBName . fieldDB) $ entityFields t
-                    , ") VALUES ("
-                    , intercalate "),(" $ replicate (length valss) $ intercalate "," $ map (const "?") (entityFields t)
-                    , ")"
-                    ]
-        where
-          t = entityDef vals
-          valss = map (map toPersistValue . toPersistFields) vals
+        let sql = T.concat
+                [ "INSERT INTO "
+                , connEscapeName conn (entityDB t)
+                , "("
+                , T.intercalate "," $ map (connEscapeName conn . fieldDB) $ entityFields t
+                , ") VALUES ("
+                , T.intercalate "),(" $ replicate (length valss) $ T.intercalate "," $ map (const "?") (entityFields t)
+                , ")"
+                ]
+        rawExecute sql (concat valss)
+      where
+        t = entityDef vals
+        valss = map (map toPersistValue . toPersistFields) vals
 
     replace k val = do
         conn <- ask
